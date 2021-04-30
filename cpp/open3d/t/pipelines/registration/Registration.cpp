@@ -72,27 +72,18 @@ static RegistrationResult GetRegistrationResultAndCorrespondences(
     }
 
     core::Tensor distances;
-    std::tie(result.correspondence_set_.second, distances) =
-            target_nns.HybridSearch(source.GetPoints(),
-                                    max_correspondence_distance, 1);
+    std::tie(result.correspondences_, distances) = target_nns.HybridSearch(
+            source.GetPoints(), max_correspondence_distance, 1);
 
-    core::Tensor valid = result.correspondence_set_.second.Ne(-1).Reshape({-1});
-    // correpondence_set : (i, corres[i]).
-    // source[i] and target[corres[i]] is a correspondence.
-    result.correspondence_set_.first =
-            core::Tensor::Arange(0, source.GetPoints().GetShape()[0], 1,
-                                 core::Dtype::Int64, device)
-                    .IndexGet({valid});
-    // Only take valid indices.
-    result.correspondence_set_.second =
-            result.correspondence_set_.second.IndexGet({valid}).Reshape({-1});
+    core::Tensor valid = result.correspondences_.Ne(-1).Reshape({-1});
+    core::Tensor distances_compressed = distances.IndexGet({valid});
 
     // Number of good correspondences (C).
-    int num_correspondences = result.correspondence_set_.first.GetLength();
+    int num_correspondences = distances_compressed.GetLength();
 
     // Reduction sum of "distances" for error.
     double squared_error =
-            static_cast<double>(distances.Sum({0}).Item<float>());
+            static_cast<double>(distances_compressed.Sum({0}).Item<float>());
     result.fitness_ = static_cast<double>(num_correspondences) /
                       static_cast<double>(source.GetPoints().GetLength());
     result.inlier_rmse_ =
@@ -234,11 +225,20 @@ RegistrationResult RegistrationMultiScaleICP(
         core::nns::NearestNeighborSearch target_nns(
                 target_down_pyramid[i].GetPoints());
 
-        result = GetRegistrationResultAndCorrespondences(
-                source_down_pyramid[i], target_down_pyramid[i], target_nns,
-                max_correspondence_distances[i], transformation);
+        // result = GetRegistrationResultAndCorrespondences(
+        //         source_down_pyramid[i], target_down_pyramid[i], target_nns,
+        //         max_correspondence_distances[i], transformation);
 
         for (int j = 0; j < criterias[i].max_iteration_; j++) {
+            core::Tensor distances;
+            std::tie(result.correspondences_, distances) =
+                    target_nns.HybridSearch(source_down_pyramid[i].GetPoints(),
+                                            max_correspondence_distances[i], 1);
+
+            core::Tensor update = estimation.ComputeTransformation(
+                    source_down_pyramid[i], target_down_pyramid[i],
+                    result.correspondences_);
+
             utility::LogDebug(
                     " ICP Scale #{:d} Iteration #{:d}: Fitness {:.4f}, RMSE "
                     "{:.4f}",
@@ -246,9 +246,6 @@ RegistrationResult RegistrationMultiScaleICP(
 
             // ComputeTransformation returns transformation matrix of
             // dtype Float64.
-            core::Tensor update = estimation.ComputeTransformation(
-                    source_down_pyramid[i], target_down_pyramid[i],
-                    result.correspondence_set_);
 
             // Multiply the transform to the cumulative transformation (update).
             transformation = update.Matmul(transformation);

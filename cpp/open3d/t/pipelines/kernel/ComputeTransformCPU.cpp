@@ -44,12 +44,13 @@ namespace kernel {
 void ComputePosePointToPlaneCPU(const float *source_points_ptr,
                                 const float *target_points_ptr,
                                 const float *target_normals_ptr,
-                                const int64_t *correspondences_first,
-                                const int64_t *correspondences_second,
+                                const int64_t *correspondences,
                                 const int n,
                                 core::Tensor &pose,
-                                const core::Dtype &dtype,
-                                const core::Device &device) {
+                                const core::Dtype dtype,
+                                const core::Device device,
+                                float &residual,
+                                int &inlier_count) {
     // As, ATA is a symmetric matrix, we only need 21 elements instead of 36.
     // ATB is of shape {6,1}. Combining both, A_1x29 is a temp. storage
     // with [0:20] elements as ATA and [21:26] elements as ATB.
@@ -66,7 +67,7 @@ void ComputePosePointToPlaneCPU(const float *source_points_ptr,
                      workload_idx++) {
 #else
     float *A_reduction = A_1x29.data();
-#pragma omp parallel for reduction(+ : A_reduction[:29]) schedule(static)
+#pragma omp parallel for reduction(+ : A_reduction[:29]) schedule(dynamic)
     for (int workload_idx = 0; workload_idx < n; workload_idx++) {
 #endif
                     float J[6] = {0};
@@ -74,8 +75,7 @@ void ComputePosePointToPlaneCPU(const float *source_points_ptr,
 
                     bool valid = GetJacobianPointToPlane(
                             workload_idx, source_points_ptr, target_points_ptr,
-                            target_normals_ptr, correspondences_first,
-                            correspondences_second, J, r);
+                            target_normals_ptr, correspondences, J, r);
 
                     if (valid) {
                         for (int i = 0, j = 0; j < 6; j++) {
@@ -108,9 +108,6 @@ void ComputePosePointToPlaneCPU(const float *source_points_ptr,
     core::Tensor A_reduction_tensor(A_1x29, {1, 29}, core::Dtype::Float32,
                                     device);
 
-    // TODO (@rishabh), residual will be used for adding robust kernel support.
-    float residual;
-    int inlier_count;
     // Compute linear system on CPU as Float64.
     DecodeAndSolve6x6(A_reduction_tensor, pose, residual, inlier_count);
 }
@@ -123,7 +120,9 @@ void ComputeRtPointToPointCPU(const float *source_points_ptr,
                               core::Tensor &R,
                               core::Tensor &t,
                               const core::Dtype dtype,
-                              const core::Device device) {
+                              const core::Device device,
+                              float &residual,
+                              int &inlier_count) {
     // Calculating mean_s and mean_t, which are mean(x, y, z) of source and
     // target points respectively.
     std::vector<float> mean_1x6(6, 0.0);

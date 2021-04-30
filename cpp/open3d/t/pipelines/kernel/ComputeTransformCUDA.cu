@@ -42,8 +42,7 @@ __global__ void ComputePosePointToPlaneCUDAKernel(
         const float *source_points_ptr,
         const float *target_points_ptr,
         const float *target_normals_ptr,
-        const int64_t *correspondences_first,
-        const int64_t *correspondences_second,
+        const int64_t *correspondences,
         const int n,
         float *global_sum) {
     const int THREAD_1D_UNIT = 256;
@@ -66,8 +65,7 @@ __global__ void ComputePosePointToPlaneCUDAKernel(
 
     bool valid = GetJacobianPointToPlane(workload_idx, source_points_ptr,
                                          target_points_ptr, target_normals_ptr,
-                                         correspondences_first,
-                                         correspondences_second, J, r);
+                                         correspondences, J, r);
 
     // Dump J, r into JtJ and Jtr
     int offset = 0;
@@ -90,33 +88,35 @@ __global__ void ComputePosePointToPlaneCUDAKernel(
 void ComputePosePointToPlaneCUDA(const float *source_points_ptr,
                                  const float *target_points_ptr,
                                  const float *target_normals_ptr,
-                                 const int64_t *correspondences_first,
-                                 const int64_t *correspondences_second,
-                                 const int n,
+                                 const int64_t *correspondences,
+                                 const int64_t n,
                                  core::Tensor &pose,
                                  const core::Dtype &dtype,
-                                 const core::Device &device) {
-    core::Tensor global_sum =
-            core::Tensor::Zeros({29}, core::Dtype::Float32, device);
-    float *global_sum_ptr = global_sum.GetDataPtr<float>();
+                                 const core::Device &device,
+                                 float &residual,
+                                 int &inlier_count);
+core::Tensor global_sum =
+        core::Tensor::Zeros({29}, core::Dtype::Float32, device);
+float *global_sum_ptr = global_sum.GetDataPtr<float>();
 
-    const int THREAD_1D_UNIT = 256;
-    const dim3 blocks((n + THREAD_1D_UNIT - 1) / THREAD_1D_UNIT);
-    const dim3 threads(THREAD_1D_UNIT);
+const int THREAD_1D_UNIT = 256;
+const dim3 blocks((n + THREAD_1D_UNIT - 1) / THREAD_1D_UNIT);
+const dim3 threads(THREAD_1D_UNIT);
 
-    ComputePosePointToPlaneCUDAKernel<<<blocks, threads>>>(
-            source_points_ptr, target_points_ptr, target_normals_ptr,
-            correspondences_first, correspondences_second, n, global_sum_ptr);
+ComputePosePointToPlaneCUDAKernel<<<blocks, threads>>>(source_points_ptr,
+                                                       target_points_ptr,
+                                                       target_normals_ptr,
+                                                       correspondences,
+                                                       n,
+                                                       global_sum_ptr);
 
-    OPEN3D_CUDA_CHECK(cudaDeviceSynchronize());
+OPEN3D_CUDA_CHECK(cudaDeviceSynchronize());
 
-    // TODO (@rishabh), residual will be used for adding robust kernel support.
-    float residual;
-    int inlier_count;
-    DecodeAndSolve6x6(global_sum, pose, residual, inlier_count);
-}
-
+// TODO (@rishabh), residual will be used for adding robust kernel support.
+DecodeAndSolve6x6(global_sum, pose, residual, inlier_count);
 }  // namespace kernel
+
 }  // namespace pipelines
 }  // namespace t
+}  // namespace open3d
 }  // namespace open3d

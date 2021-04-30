@@ -102,7 +102,7 @@ public:
     core::Tensor transformation_;
     /// Correspondence Set. Refer to the definition in
     /// `TransformationEstimation.h`.
-    CorrespondenceSet correspondence_set_;
+    core::Tensor correspondences_;
     /// RMSE of all inlier correspondences. Lower is better.
     double inlier_rmse_;
     /// For ICP: the overlapping area (# of inlier correspondences / # of points

@@ -33,11 +33,12 @@ namespace t {
 namespace pipelines {
 namespace kernel {
 
-core::Tensor ComputePosePointToPlane(
-        const core::Tensor &source_points,
-        const core::Tensor &target_points,
-        const core::Tensor &target_normals,
-        const pipelines::registration::CorrespondenceSet &corres) {
+core::Tensor ComputePosePointToPlane(const core::Tensor &source_points,
+                                     const core::Tensor &target_points,
+                                     const core::Tensor &target_normals,
+                                     const core::Tensor &corres,
+                                     float &residual,
+                                     int &inlier_count) {
     // Get dtype and device.
     core::Dtype dtype = core::Dtype::Float32;
     core::Device device = source_points.GetDevice();
@@ -52,14 +53,12 @@ core::Tensor ComputePosePointToPlane(
     // Pose {6,} tensor [ouput].
     core::Tensor pose = core::Tensor::Empty({6}, core::Dtype::Float64, device);
     // Number of correspondences.
-    int n = corres.first.GetLength();
 
     // Pointer to point cloud data - indexed according to correspondences.
     core::Tensor source_points_contiguous = source_points.Contiguous();
     core::Tensor target_points_contiguous = target_points.Contiguous();
     core::Tensor target_normals_contiguous = target_normals.Contiguous();
-    core::Tensor corres_first_contiguous = corres.first.Contiguous();
-    core::Tensor corres_second_contiguous = corres.second.Contiguous();
+    core::Tensor corres_contiguous = corres.Contiguous();
 
     const float *source_points_ptr =
             source_points_contiguous.GetDataPtr<float>();
@@ -67,20 +66,18 @@ core::Tensor ComputePosePointToPlane(
             target_points_contiguous.GetDataPtr<float>();
     const float *target_normals_ptr =
             target_normals_contiguous.GetDataPtr<float>();
-    const int64_t *corres_first = corres_first_contiguous.GetDataPtr<int64_t>();
-    const int64_t *corres_second =
-            corres_second_contiguous.GetDataPtr<int64_t>();
+    const int64_t *corres_ptr = corres_contiguous.GetDataPtr<int64_t>();
 
     core::Device::DeviceType device_type = device.GetType();
     if (device_type == core::Device::DeviceType::CPU) {
         ComputePosePointToPlaneCPU(source_points_ptr, target_points_ptr,
-                                   target_normals_ptr, corres_first,
-                                   corres_second, n, pose, dtype, device);
+                                   target_normals_ptr, corres, pose, dtype,
+                                   device, residual, count);
     } else if (device_type == core::Device::DeviceType::CUDA) {
 #ifdef BUILD_CUDA_MODULE
         ComputePosePointToPlaneCUDA(source_points_ptr, target_points_ptr,
-                                    target_normals_ptr, corres_first,
-                                    corres_second, n, pose, dtype, device);
+                                    target_normals_ptr, corres, n, pose, dtype,
+                                    device, residual, count);
 #else
         utility::LogError("Not compiled with CUDA, but CUDA device is used.");
 #endif
@@ -93,7 +90,9 @@ core::Tensor ComputePosePointToPlane(
 std::tuple<core::Tensor, core::Tensor> ComputeRtPointToPoint(
         const core::Tensor &source_points,
         const core::Tensor &target_points,
-        const pipelines::registration::CorrespondenceSet &corres) {
+        const core::Tensor &corres,
+        float &residual,
+        int &inlier_count) {
     // Get dtype and device.
     core::Dtype dtype = core::Dtype::Float32;
     core::Device device = source_points.GetDevice();
@@ -108,7 +107,7 @@ std::tuple<core::Tensor, core::Tensor> ComputeRtPointToPoint(
     core::Tensor t;
 
     // Number of correspondences.
-    int n = corres.first.GetLength();
+    int n = corres.GetLength();
 
     core::Device::DeviceType device_type = device.GetType();
     if (device_type == core::Device::DeviceType::CPU) {

@@ -41,11 +41,12 @@ namespace kernel {
 /// \param correspondences CorrespondenceSet. [refer to definition in
 /// `/cpp/open3d/t/pipelines/registration/TransformationEstimation.h`].
 /// \return Pose [X Y Z alpha beta gamma], a shape {6} tensor of dtype Float32.
-core::Tensor ComputePosePointToPlane(
-        const core::Tensor &source_points,
-        const core::Tensor &target_points,
-        const core::Tensor &target_normals,
-        const pipelines::registration::CorrespondenceSet &correspondences);
+core::Tensor ComputePosePointToPlane(const core::Tensor &source_points,
+                                     const core::Tensor &target_points,
+                                     const core::Tensor &target_normals,
+                                     const core::Tensor &corres,
+                                     float &residual,
+                                     int &inlier_count);
 
 /// \brief Computes (R) Rotation {3,3} and (t) translation {3,}
 /// for point to point registration method.
@@ -57,7 +58,9 @@ core::Tensor ComputePosePointToPlane(
 std::tuple<core::Tensor, core::Tensor> ComputeRtPointToPoint(
         const core::Tensor &source_points,
         const core::Tensor &target_points,
-        const pipelines::registration::CorrespondenceSet &correspondences);
+        const core::Tensor &corres,
+        float &residual,
+        int &inlier_count);
 
 }  // namespace kernel
 }  // namespace pipelines

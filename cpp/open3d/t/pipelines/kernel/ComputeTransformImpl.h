@@ -39,52 +39,52 @@ namespace kernel {
 void ComputePosePointToPlaneCPU(const float *source_points_ptr,
                                 const float *target_points_ptr,
                                 const float *target_normals_ptr,
-                                const int64_t *correspondences_first,
-                                const int64_t *correspondences_second,
+                                const int64_t *correspondences,
                                 const int n,
                                 core::Tensor &pose,
                                 const core::Dtype &dtype,
-                                const core::Device &device);
+                                const core::Device &device,
+                                float &residual,
+                                int &inlier_count);
 
 #ifdef BUILD_CUDA_MODULE
 void ComputePosePointToPlaneCUDA(const float *source_points_ptr,
                                  const float *target_points_ptr,
                                  const float *target_normals_ptr,
-                                 const int64_t *correspondences_first,
-                                 const int64_t *correspondences_second,
-                                 const int n,
+                                 const int64_t *correspondences,
+                                 const int64_t n,
                                  core::Tensor &pose,
                                  const core::Dtype &dtype,
-                                 const core::Device &device);
+                                 const core::Device &device,
+                                 float &residual,
+                                 int &inlier_count);
 #endif
 
 void ComputeRtPointToPointCPU(const float *source_points_ptr,
                               const float *target_points_ptr,
-                              const int64_t *correspondences_first,
-                              const int64_t *correspondences_second,
-                              const int n,
+                              const int64_t *correspondences,
+                              const int64_t n,
                               core::Tensor &R,
                               core::Tensor &t,
                               const core::Dtype dtype,
-                              const core::Device device);
+                              const core::Device device,
+                              float &residual,
+                              int &inlier_count);
 
 OPEN3D_HOST_DEVICE inline bool GetJacobianPointToPlane(
         int64_t workload_idx,
         const float *source_points_ptr,
         const float *target_points_ptr,
         const float *target_normals_ptr,
-        const int64_t *correspondence_first,
-        const int64_t *correspondence_second,
+        const int64_t *correspondences,
         float *J_ij,
         float &r) {
-    // TODO (@rishabh): Pass correspondence without eliminating -1
-    // in registration::GetRegistationResultAndCorrespondences,
-    // and directly check if valid (index != -1) here.
-    // In that case, only use correspondence_second as index for
-    // target, and workload_idx as index for source pointcloud.
+    const int64_t target_idx = 3 * correspondences[workload_idx];
+    if (target_idx == -1) {
+        return false;
+    }
 
-    const int64_t source_idx = 3 * correspondence_first[workload_idx];
-    const int64_t target_idx = 3 * correspondence_second[workload_idx];
+    const int64_t source_idx = 3 * workload_idx;
 
     const float &sx = source_points_ptr[source_idx + 0];
     const float &sy = source_points_ptr[source_idx + 1];

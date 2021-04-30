@@ -218,9 +218,9 @@ private:
 
                 if (i != 0) {
                     out_ << std::setprecision(4) << 1000.0 * i / total_time_i
-                        << " FPS " << std::endl
-                        << std::endl
-                        << "Total Points: " << total_points_in_frame;
+                         << " FPS " << std::endl
+                         << std::endl
+                         << "Total Points: " << total_points_in_frame;
                 }
 
                 gui::Application::GetInstance().PostToMainThread(
@@ -520,7 +520,7 @@ private:
     std::vector<open3d::t::geometry::PointCloud> pointclouds_device_;
     t::geometry::PointCloud pcd_;
     t::geometry::PointCloud pcd_current_;
-    
+
     std::stringstream out_;
 
     int64_t total_approximate_points_in_dataset_;
