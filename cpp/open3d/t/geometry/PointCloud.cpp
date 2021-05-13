@@ -87,7 +87,57 @@ PointCloud PointCloud::To(const core::Device &device, bool copy) const {
 
 PointCloud PointCloud::Clone() const { return To(GetDevice(), /*copy=*/true); }
 
-PointCloud PointCloud::Append(const PointCloud &other) const {
+
+PointCloud PointCloud::Append(const PointCloud &other) {
+
+    int64_t length = GetPoints().GetLength();
+
+    for (auto &kv : point_attr_) {
+        if (other.HasPointAttr(kv.first)) {
+            auto other_attr = other.GetPointAttr(kv.first);
+            other_attr.AssertDtype(kv.second.GetDtype());
+            other_attr.AssertDevice(kv.second.GetDevice());
+            
+            // Checking shape compatibility.
+            core::SizeVector other_attr_shape = other_attr.GetShape();
+            other_attr_shape.erase(other_attr_shape.begin());
+            
+            core::SizeVector attr_shape = kv.second.GetShape();
+            attr_shape.erase(attr_shape.begin());
+
+            if (other_attr_shape != attr_shape) {
+                utility::LogError(
+                        "Shape mismatch. Attribure {}, shape {}, is not "
+                        "compatible with {}.",
+                        kv.first, other_attr.GetShape(), kv.second.GetShape());
+            }
+
+            core::SizeVector combined_shape(kv.second.GetShape());
+            combined_shape[0] = other_attr.GetLength() + kv.second.GetLength();
+
+            core::Tensor combined_attr =
+                    core::Tensor::Empty(combined_shape, kv.second.GetDtype(),
+                                        kv.second.GetDevice());
+        
+            combined_attr.SetItem(core::TensorKey::Slice(0, length, 1),
+                                  kv.second);
+            combined_attr.SetItem(
+                    core::TensorKey::Slice(length, combined_shape[0], 1),
+                    other_attr);
+
+            this->SetPointAttr(kv.first, combined_attr);
+        } else {
+            utility::LogError(
+                    "The pointcloud is missing attribute {}. The pointcloud "
+                    "being appended, must have all the attributes present in "
+                    "the pointcloud it is being appended to.",
+                    kv.first);
+        }
+    }
+    return pcd;
+}
+
+PointCloud PointCloud::Add(const PointCloud &other) const {
     PointCloud pcd(GetDevice());
 
     int64_t length = GetPoints().GetLength();
