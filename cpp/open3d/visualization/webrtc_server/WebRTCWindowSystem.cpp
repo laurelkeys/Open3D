@@ -57,8 +57,8 @@ namespace webrtc_server {
 static const std::list<std::string> s_public_ice_servers{
         "stun:stun.l.google.com:19302"};
 static const std::list<std::string> s_open3d_ice_servers{
-        // "turn:user:password@34.69.27.100:3478",
-        // "turn:user:password@34.69.27.100:3478?transport=tcp",
+        "turn:user:password@34.69.27.100:3478",
+        "turn:user:password@34.69.27.100:3478?transport=tcp",
 };
 
 static std::string GetEnvWebRTCIP() {
