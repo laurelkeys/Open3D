@@ -88,14 +88,16 @@ RANSACResult EvaluateRANSACBasedOnDistance(
 // plane to all points is minimized.
 //
 // Reference:
-// https://www.ilikebigbits.com/2015_03_04_plane_from_points.html
+// https://www.ilikebigbits.com/2017_09_25_plane_from_points_2.html
 Eigen::Vector4d GetPlaneFromPoints(const std::vector<Eigen::Vector3d> &points,
                                    const std::vector<size_t> &inliers) {
+    const double inv_n = 1.0 / double(inliers.size());
+
     Eigen::Vector3d centroid(0, 0, 0);
     for (size_t idx : inliers) {
         centroid += points[idx];
     }
-    centroid /= double(inliers.size());
+    centroid *= inv_n;
 
     double xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
 
@@ -109,26 +111,38 @@ Eigen::Vector4d GetPlaneFromPoints(const std::vector<Eigen::Vector3d> &points,
         zz += r(2) * r(2);
     }
 
-    double det_x = yy * zz - yz * yz;
-    double det_y = xx * zz - xz * xz;
-    double det_z = xx * yy - xy * xy;
+    xx *= inv_n;
+    xy *= inv_n;
+    xz *= inv_n;
+    yy *= inv_n;
+    yz *= inv_n;
+    zz *= inv_n;
 
-    Eigen::Vector3d abc;
-    if (det_x > det_y && det_x > det_z) {
-        abc = Eigen::Vector3d(det_x, xz * yz - xy * zz, xy * yz - xz * yy);
-    } else if (det_y > det_z) {
-        abc = Eigen::Vector3d(xz * yz - xy * zz, det_y, xy * xz - yz * xx);
-    } else {
-        abc = Eigen::Vector3d(xy * yz - xz * yy, xy * xz - yz * xx, det_z);
-    }
+    const double det_x = yy * zz - yz * yz;
+    const double det_y = xx * zz - xz * xz;
+    const double det_z = xx * yy - xy * xy;
 
-    double norm = abc.norm();
+    const Eigen::Vector3d x_axis_dir(det_x, xz * yz - xy * zz, xy * yz - xz * yy);
+    const Eigen::Vector3d y_axis_dir(xz * yz - xy * zz, det_y, xy * xz - yz * xx);
+    const Eigen::Vector3d z_axis_dir(xy * yz - xz * yy, xy * xz - yz * xx, det_z);
+
+    Eigen::Vector3d weighted_dir(0, 0, 0);
+    const double weight_x = det_x * det_x; // NOTE: weighted_dir.dot(x_axis_dir) == 0.0
+    weighted_dir += weight_x * x_axis_dir;
+
+    const double weight_y = det_y * det_y * (weighted_dir.dot(y_axis_dir) < 0 ? -1 : 1);
+    weighted_dir += weight_y * y_axis_dir;
+
+    const double weight_z = det_z * det_z * (weighted_dir.dot(z_axis_dir) < 0 ? -1 : 1);
+    weighted_dir += weight_z * z_axis_dir;
+
+    const double norm = weighted_dir.norm();
     // Return invalid plane if the points don't span a plane.
     if (norm == 0) {
         return Eigen::Vector4d(0, 0, 0, 0);
     }
-    abc /= abc.norm();
-    double d = -abc.dot(centroid);
+    const Eigen::Vector3d abc = weighted_dir / norm;
+    const double d = -abc.dot(centroid);
     return Eigen::Vector4d(abc(0), abc(1), abc(2), d);
 }
 
